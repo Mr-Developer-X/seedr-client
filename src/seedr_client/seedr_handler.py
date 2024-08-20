@@ -394,7 +394,7 @@ class SeedrHandler:
         }
         generated_uuid = str(uuid.uuid4())
         try:
-            resp = client.put(self.zip_link+generated_uuid, data=data)
+            resp = client.put(self.folder_zip_url+generated_uuid, data=data)
             if resp.json()['success'] == True:
                 return resp.json()['url']
             else:
