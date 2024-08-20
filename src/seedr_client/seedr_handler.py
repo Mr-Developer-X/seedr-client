@@ -1,6 +1,7 @@
 import os
 import re
 import json
+import uuid
 import aria2p
 import requests
 import tempfile
@@ -25,12 +26,15 @@ class SeedrHandler:
         password=None,
         access_token=None,
         aria2c_secret=None,
+        rsess_remember=None,
         download_directory=".",
     ):
         self.rate_limit = 1
         self.email = email
         self.password = password
         self.access_token = access_token
+        self.oauth_url = 'https://www.seedr.cc/auth/login'
+        self.folder_zip_url = 'https://www.seedr.cc/download/archive/init/'
         self.base_folder_url = "https://www.seedr.cc/api/folder"
         self.base_oauth_url = "https://www.seedr.cc/oauth_test"
         # This is the list of file types Seedr client is not allowed to download,
@@ -168,9 +172,17 @@ class SeedrHandler:
                 "username": self.email,
                 "password": self.password,
             }
+            data2 = {
+                'password': self.password,
+                'rememberme': "on",
+                'username': self.email
+            }
             response = requests.post(f"{self.base_oauth_url}/token.php", data=data)
-            if "access_token" in response.text:
+            client = requests.session()
+            resp = client.post(url=self.oauth_url, data=data2)
+            if "access_token" in response.text and resp.json()['success'] == True:
                 self.access_token = json.loads(response.text)["access_token"]
+                self.rsess_remember = resp.cookies.get('RSESS_remember')
             else:
                 # TODO add a way to notify when this happens
                 raise InvalidLogin("Invalid username and password combination.")
@@ -373,6 +385,23 @@ class SeedrHandler:
                 f"The provided Torrent couldn't be leeched/downloaded to the drive.\n {data=}"
             )
 
+    def zip_folder(self, folder_id):
+        client = requests.session()
+        client.cookies.set('RSESS_remember', self.rsess_remember)
+        data = {
+    'archive_arr[0][type]': 'folder',
+    'archive_arr[0][id]': folder_id
+        }
+        generated_uuid = str(uuid.uuid4())
+        try:
+            resp = client.put(self.zip_link+generated_uuid, data=data)
+            if resp.json()['success'] == True:
+                return resp.json()['url']
+            else:
+                return (f'Error @Zip_folder: {resp.text}')
+        except Exception as e:
+            return (e.__class__.__name__, f"{e}")
+    
     def download_folder(self, folder_id, builtin_downloader=True):
         """
         This function either downloads the entire folder excluding any extensions that are bared or returns a list of
